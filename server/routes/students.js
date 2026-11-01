@@ -3,67 +3,89 @@ import Student from "../models/Student.js";
 
 const router = express.Router();
 
-// ── GET /api/students — list all students, newest first ──────────────
+// GET /api/students — list all students, newest first
 router.get("/", async (_req, res) => {
   try {
     const students = await Student.find().sort({ createdAt: -1 });
     res.json(students);
   } catch (err) {
     console.error("Error fetching students:", err.message);
-    res.status(500).json({ error: "Failed to fetch students" });
+    res.status(500).json({
+      error: "Failed to fetch students",
+    });
   }
 });
 
-// ── POST /api/students — validate and create a student ───────────────
+// POST /api/students — validate and create a student
 router.post("/", async (req, res) => {
   try {
     const { name, department, email } = req.body;
 
-    // Server-side required-field validation
-    const missing = [];
-    if (!name || !name.trim()) missing.push("Name");
-    if (!department || !department.trim()) missing.push("Department");
-    if (!email || !email.trim()) missing.push("Email");
-
-    if (missing.length) {
-      return res
-        .status(400)
-        .json({ error: `Missing required fields: ${missing.join(", ")}` });
+    // Validate that required fields are strings
+    if (
+      typeof name !== "string" ||
+      typeof department !== "string" ||
+      typeof email !== "string"
+    ) {
+      return res.status(400).json({
+        error: "Name, department, and email must be strings",
+      });
     }
 
-    // Email format check
+    // Trim whitespace
+    const cleanName = name.trim();
+    const cleanDepartment = department.trim();
+    const cleanEmail = email.trim().toLowerCase();
+
+    // Required-field validation
+    if (!cleanName || !cleanDepartment || !cleanEmail) {
+      return res.status(400).json({
+        error: "Name, department, and email are required",
+      });
+    }
+
+    // Email format validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email.trim())) {
-      return res
-        .status(400)
-        .json({ error: "Please provide a valid email address" });
+
+    if (!emailRegex.test(cleanEmail)) {
+      return res.status(400).json({
+        error: "Please provide a valid email address",
+      });
     }
 
+    // Create student
     const student = await Student.create({
-      name: name.trim(),
-      department: department.trim(),
-      email: email.trim(),
+      name: cleanName,
+      department: cleanDepartment,
+      email: cleanEmail,
     });
 
-    res.status(201).json(student);
+    return res.status(201).json(student);
   } catch (err) {
-    // Handle duplicate email (MongoDB error code 11000)
+    // Handle duplicate email
     if (err.code === 11000) {
-      return res
-        .status(409)
-        .json({ error: "A student with this email already exists" });
+      return res.status(409).json({
+        error: "A student with this email already exists",
+      });
     }
 
     // Handle Mongoose validation errors
     if (err.name === "ValidationError") {
-      const messages = Object.values(err.errors).map((e) => e.message);
-      return res.status(400).json({ error: messages.join(". ") });
+      const messages = Object.values(err.errors).map(
+        (error) => error.message
+      );
+
+      return res.status(400).json({
+        error: messages.join(". "),
+      });
     }
 
     console.error("Error creating student:", err.message);
-    res.status(500).json({ error: "Failed to create student" });
+
+    return res.status(500).json({
+      error: "Failed to create student",
+    });
   }
 });
 
 export default router;
-
